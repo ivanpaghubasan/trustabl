@@ -1953,6 +1953,39 @@ def calc(expr: str) -> int:
 			"  return { content: [{ type: \"text\", text: id }] };\n" +
 			"});\n",
 	},
+
+	// ─── CSDK-017 placeholder tool description ─────────────────────────────
+	{name: "CSDK-017 fires on TODO placeholder description", ruleID: "CSDK-017", kind: models.KindClaudeSDKTool, src: `
+def fetch_data(x: str) -> dict:
+    """TODO: describe this tool."""
+    return {}
+`,
+		toolConfig: nil, wantFires: true},
+	{name: "CSDK-017 silent with a real description", ruleID: "CSDK-017", kind: models.KindClaudeSDKTool, src: `
+def fetch_data(x: str) -> dict:
+    """Fetch the current account balance for the given customer ID."""
+    return {}
+`,
+		toolConfig: nil, wantFires: false},
+
+	// ─── CSDK-018 description too short to guide selection ─────────────────
+	{name: "CSDK-018 fires on a stub description", ruleID: "CSDK-018", kind: models.KindClaudeSDKTool, src: `
+def fetch_data(x: str) -> dict:
+    """Gets data."""
+    return {}
+`,
+		toolConfig: nil, wantFires: true},
+	{name: "CSDK-018 silent with a description over the length threshold", ruleID: "CSDK-018", kind: models.KindClaudeSDKTool, src: `
+def fetch_data(x: str) -> dict:
+    """Fetch the current account balance for the given customer ID."""
+    return {}
+`,
+		toolConfig: nil, wantFires: false},
+	{name: "CSDK-018 silent with no description at all", ruleID: "CSDK-018", kind: models.KindClaudeSDKTool, src: `
+def fetch_data(x: str) -> dict:
+    return {}
+`,
+		toolConfig: nil, wantFires: false},
 }
 
 // policyRepoRuleCases covers repo-scoped rules.
