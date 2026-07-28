@@ -57,9 +57,14 @@ type MatchExpr struct {
 	Always                    *bool `yaml:"always,omitempty"`
 
 	// String-list predicates
-	NameIn        []string `yaml:"name_in,omitempty"`
-	NameHasPrefix []string `yaml:"name_has_prefix,omitempty"`
-	HasBodyText   []string `yaml:"has_body_text,omitempty"`
+	NameIn             []string `yaml:"name_in,omitempty"`
+	NameHasPrefix      []string `yaml:"name_has_prefix,omitempty"`
+	HasBodyText        []string `yaml:"has_body_text,omitempty"`
+	HasDescriptionText []string `yaml:"has_description_text,omitempty"`
+
+	// Int predicates (tool scope) — pointer distinguishes "0" from "absent",
+	// mirroring the *bool tri-state pattern above.
+	DescriptionLengthLt *int `yaml:"description_length_lt,omitempty"`
 
 	// Nested struct predicates (tool scope)
 	ParamNameMatches              *ParamNameMatchExpr                `yaml:"param_name_matches,omitempty"`

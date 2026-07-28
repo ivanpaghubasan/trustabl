@@ -318,6 +318,14 @@ func (e MatchExpr) EvaluateTool(t models.ToolDef, pf analysis.ParsedFile) bool {
 	if len(e.HasBodyText) > 0 && !PredHasBodyText(e.HasBodyText, t, pf) {
 		return false
 	}
+	if len(e.HasDescriptionText) > 0 && !PredHasDescriptionText(e.HasDescriptionText, t) {
+		return false
+	}
+
+	// Int predicates
+	if e.DescriptionLengthLt != nil && !PredDescriptionLengthLt(t, *e.DescriptionLengthLt) {
+		return false
+	}
 
 	// Nested struct predicates
 	if e.ParamNameMatches != nil && !PredParamNameMatches(*e.ParamNameMatches, t) {
@@ -353,6 +361,7 @@ var predicatesByScope = map[models.Scope]map[string]bool{
 		"has_write_call": true, "has_dynamic_url_call": true,
 		"has_http_call_without_timeout": true,
 		"name_in":                       true, "name_has_prefix": true, "has_body_text": true,
+		"has_description_text": true, "description_length_lt": true,
 		"param_name_matches": true, "call_without_kwarg": true,
 		"call_uses_unnormalized_path_param": true,
 		"tool_decorator_kwarg_value":        true, "tool_decorator_kwarg_present": true,
@@ -422,6 +431,8 @@ func (e MatchExpr) setPredicateNames() []string {
 	add(len(e.NameIn) > 0, "name_in")
 	add(len(e.NameHasPrefix) > 0, "name_has_prefix")
 	add(len(e.HasBodyText) > 0, "has_body_text")
+	add(len(e.HasDescriptionText) > 0, "has_description_text")
+	add(e.DescriptionLengthLt != nil, "description_length_lt")
 	add(e.ParamNameMatches != nil, "param_name_matches")
 	add(e.CallWithoutKwarg != nil, "call_without_kwarg")
 	add(e.CallUsesUnnormalizedPathParam != nil, "call_uses_unnormalized_path_param")
