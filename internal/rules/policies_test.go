@@ -2406,6 +2406,17 @@ var policyAgentRuleCases = []policyAgentCase{
 			}}},
 		models.RepoInventory{}, false},
 
+	{"CREW-110 fires when Agent has no max_iter", "CREW-110",
+		models.AgentDef{SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython},
+		models.RepoInventory{}, true},
+	{"CREW-110 silent when max_iter set", "CREW-110",
+		models.AgentDef{
+			SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython,
+			Kwargs: &models.KwargTree{Children: map[string]*models.KwargTree{
+				"max_iter": {Value: &models.Expr{Kind: models.ExprLiteralInt, Text: "5"}},
+			}}},
+		models.RepoInventory{}, false},
+
 	{"CREW-106 fires when FileReadTool has no file_path", "CREW-106",
 		models.AgentDef{
 			SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython,
