@@ -111,6 +111,9 @@ func (e MatchExpr) EvaluateRepo(p models.RepoProfile, inv models.RepoInventory) 
 	if len(e.RepoClaudeOptionsPermissionModeIs) > 0 && !PredRepoClaudeOptionsPermissionModeIs(e.RepoClaudeOptionsPermissionModeIs, inv) {
 		return false
 	}
+	if e.RepoClaudeOptionsMaxTurnsMissing != nil && PredRepoClaudeOptionsMaxTurnsMissing(inv) != *e.RepoClaudeOptionsMaxTurnsMissing {
+		return false
+	}
 	return true
 }
 
@@ -377,6 +380,7 @@ var predicatesByScope = map[models.Scope]map[string]bool{
 		"repo_component_present": true, "repo_uses_default_tracing": true,
 		"repo_claude_default_mode_is":            true,
 		"repo_claude_options_permission_mode_is": true,
+		"repo_claude_options_max_turns_missing":  true,
 	},
 }
 
@@ -446,6 +450,7 @@ func (e MatchExpr) setPredicateNames() []string {
 	add(e.RepoUsesDefaultTracing != nil, "repo_uses_default_tracing")
 	add(len(e.RepoClaudeDefaultModeIs) > 0, "repo_claude_default_mode_is")
 	add(len(e.RepoClaudeOptionsPermissionModeIs) > 0, "repo_claude_options_permission_mode_is")
+	add(e.RepoClaudeOptionsMaxTurnsMissing != nil, "repo_claude_options_max_turns_missing")
 	return n
 }
 

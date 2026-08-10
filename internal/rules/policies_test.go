@@ -2101,6 +2101,52 @@ var policyRepoRuleCases = []policyRepoCase{
 		},
 		false},
 
+	// ─── CSDK-204 session max_turns missing (repo-scoped) ────────────────────
+	{"CSDK-204 fires when the only ClaudeAgentOptions sets no max_turns", "CSDK-204",
+		models.RepoProfile{},
+		models.RepoInventory{
+			SDKsDetected:       []models.SDK{models.SDKClaudeAgentSDK},
+			ClaudeAgentOptions: []models.ClaudeAgentOptionsDef{{}},
+		},
+		true},
+	{"CSDK-204 silent when max_turns is set", "CSDK-204",
+		models.RepoProfile{},
+		models.RepoInventory{
+			SDKsDetected:       []models.SDK{models.SDKClaudeAgentSDK},
+			ClaudeAgentOptions: []models.ClaudeAgentOptionsDef{optionsWithMaxTurns("10")},
+		},
+		false},
+	// One of several constructions sets max_turns: that's enough to silence
+	// the rule for the whole repo — this is an absence check across all
+	// constructions, not a per-call match.
+	{"CSDK-204 silent when at least one of several sets max_turns", "CSDK-204",
+		models.RepoProfile{},
+		models.RepoInventory{
+			SDKsDetected: []models.SDK{models.SDKClaudeAgentSDK},
+			ClaudeAgentOptions: []models.ClaudeAgentOptionsDef{
+				{}, optionsWithMaxTurns("10"),
+			},
+		},
+		false},
+	// No ClaudeAgentOptions construction anywhere: nothing to flag.
+	{"CSDK-204 silent when repo has no ClaudeAgentOptions", "CSDK-204",
+		models.RepoProfile{},
+		models.RepoInventory{
+			SDKsDetected:       []models.SDK{models.SDKClaudeAgentSDK},
+			ClaudeAgentOptions: nil,
+		},
+		false},
+	// The only construction is Opaque (built via ** unpacking): its kwarg set
+	// is untrustworthy, so its silence on max_turns isn't evidence of a
+	// missing cap.
+	{"CSDK-204 silent when the only ClaudeAgentOptions is opaque", "CSDK-204",
+		models.RepoProfile{},
+		models.RepoInventory{
+			SDKsDetected:       []models.SDK{models.SDKClaudeAgentSDK},
+			ClaudeAgentOptions: []models.ClaudeAgentOptionsDef{{Opaque: true}},
+		},
+		false},
+
 	// ─── CSDK-203 / ADK-201 / OAI-202 (team rules): SDK code but no agent doc ─
 	// repo_has_sdk_in_code reads inv.SDKsDetected; repo_component_present reads
 	// profile.Manifest.Components. Fire = SDK present AND neither an agents_md
@@ -2179,6 +2225,16 @@ func optionsWithPermissionMode(mode string) models.ClaudeAgentOptionsDef {
 		Kwargs: &models.KwargTree{
 			Children: map[string]*models.KwargTree{
 				"permission_mode": {Value: &models.Expr{Kind: models.ExprLiteralString, Text: `"` + mode + `"`}},
+			},
+		},
+	}
+}
+
+func optionsWithMaxTurns(v string) models.ClaudeAgentOptionsDef {
+	return models.ClaudeAgentOptionsDef{
+		Kwargs: &models.KwargTree{
+			Children: map[string]*models.KwargTree{
+				"max_turns": {Value: &models.Expr{Kind: models.ExprLiteralInt, Text: v}},
 			},
 		},
 	}

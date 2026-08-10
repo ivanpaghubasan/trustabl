@@ -108,6 +108,7 @@ type MatchExpr struct {
 	RepoUsesDefaultTracing            *bool    `yaml:"repo_uses_default_tracing,omitempty"`
 	RepoClaudeDefaultModeIs           []string `yaml:"repo_claude_default_mode_is,omitempty"`
 	RepoClaudeOptionsPermissionModeIs []string `yaml:"repo_claude_options_permission_mode_is,omitempty"`
+	RepoClaudeOptionsMaxTurnsMissing  *bool    `yaml:"repo_claude_options_max_turns_missing,omitempty"`
 }
 
 // ToolDecoratorKwargValueExpr matches a decorator kwarg to a specific value.

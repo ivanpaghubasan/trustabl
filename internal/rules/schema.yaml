@@ -435,3 +435,12 @@ rules:
 #       permission_mode to one of the listed modes. Reads
 #       RepoInventory.ClaudeAgentOptions[].Kwargs (permission_mode). The in-code,
 #       session-level analogue of repo_claude_default_mode_is. Used by CSDK-202.
+#   repo_claude_options_max_turns_missing: true | false
+#       Fires when the repo has at least one non-opaque ClaudeAgentOptions(...)
+#       construction and NONE of them set max_turns. Reads
+#       RepoInventory.ClaudeAgentOptions[].Kwargs (max_turns) via the same
+#       lookup as repo_claude_options_permission_mode_is. Constructions built
+#       with ** unpacking (Opaque: true) are skipped — their kwarg set is
+#       untrustworthy, so their silence isn't evidence of a missing cap. A repo
+#       with zero ClaudeAgentOptions constructions never fires. Used by
+#       CSDK-204.

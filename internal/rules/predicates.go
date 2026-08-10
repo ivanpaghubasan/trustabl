@@ -1050,3 +1050,25 @@ func PredRepoClaudeOptionsPermissionModeIs(modes []string, inv models.RepoInvent
 	return false
 }
 
+// PredRepoClaudeOptionsMaxTurnsMissing fires when the repo constructs at least
+// one ClaudeAgentOptions(...) and NO such construction sets max_turns. This is
+// an absence check across every construction, not a per-call value match: a
+// single options object that sets an explicit cap silences the rule for the
+// repo. Constructions marked Opaque (built with ** unpacking) are skipped —
+// their kwarg set is untrustworthy, so their silence is not evidence of a
+// missing cap. A repo with no ClaudeAgentOptions at all never fires: there is
+// no session config to flag.
+func PredRepoClaudeOptionsMaxTurnsMissing(inv models.RepoInventory) bool {
+	concrete := 0
+	for _, opt := range inv.ClaudeAgentOptions {
+		if opt.Opaque {
+			continue
+		}
+		concrete++
+		if node := lookupKwargInTree(opt.Kwargs, "max_turns"); node != nil && node.Value != nil {
+			return false
+		}
+	}
+	return concrete > 0
+}
+
