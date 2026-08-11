@@ -97,6 +97,165 @@ func matchCondition(expr rules.MatchExpr) string {
 	return "When the condition described by this rule is met."
 }
 
+// Stamp is the passive watermark embedded in a GenerateCombined output.
+type Stamp struct {
+	Date          string                    // YYYY-MM-DD
+	RulesSHA      string                    // short (7-char) or full SHA
+	SchemaVersion int
+	Categories    []models.DetectorCategory // sorted, controls section order
+}
+
+// sortRules sorts a rule slice by severity rank (critical first) then rule ID ascending.
+func sortRules(rs []rules.RuleDef) {
+	sort.Slice(rs, func(i, j int) bool {
+		ri := severityRank(rs[i].Severity)
+		rj := severityRank(rs[j].Severity)
+		if ri != rj {
+			return ri < rj
+		}
+		return rs[i].ID < rs[j].ID
+	})
+}
+
+// matchConditionForScope returns a human-readable "When this applies" string.
+// For skill-scoped rules it delegates to the existing matchCondition predicate
+// switch; for all other scopes it returns a scope-derived sentence.
+func matchConditionForScope(scope models.Scope, expr rules.MatchExpr) string {
+	switch scope {
+	case models.ScopeTool:
+		return "When defining a tool."
+	case models.ScopeAgent:
+		return "When declaring an agent."
+	case models.ScopeRepo:
+		return "For any repo using this SDK."
+	case models.ScopeSubagent:
+		return "When declaring a subagent."
+	default: // ScopeSkill
+		return matchCondition(expr)
+	}
+}
+
+// emitRuleSection writes a ### heading + per-rule blocks. It is a no-op when
+// rs is empty (omits the heading), keeping output clean for packs with no
+// rules at a given scope.
+func emitRuleSection(b *strings.Builder, heading string, rs []rules.RuleDef, scope models.Scope) {
+	if len(rs) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "### %s\n\n", heading)
+	for _, r := range rs {
+		fmt.Fprintf(b, "---\n\n")
+		fmt.Fprintf(b, "#### [%s] %s\n", r.ID, r.Title)
+		fmt.Fprintf(b, "**Severity:** %s | **Confidence:** %.2f\n\n", string(r.Severity), r.Confidence)
+		fmt.Fprintf(b, "**Directive:** %s\n\n", sanitizeEmittedText(firstSentence(r.Fix, 0)))
+		fmt.Fprintf(b, "**Why:** %s\n\n", sanitizeEmittedText(firstSentence(r.Explanation, 0)))
+		fmt.Fprintf(b, "**When this applies:** %s\n\n", sanitizeEmittedText(matchConditionForScope(scope, r.Match)))
+	}
+}
+
+// GenerateCombined produces a combined pre-coding SKILL.md for one or more SDK
+// policy packs. It collects all rule scopes (tool, agent, repo, skill) from
+// each matched pack and organizes output as one ## section per SDK in the
+// order given by stamp.Categories.
+//
+// policies should be the full output of rules.LoadLenient — GenerateCombined
+// filters to the categories in stamp.Categories itself.
+//
+// Output is byte-stable: categories are iterated in stamp.Categories order;
+// within each section rules are sorted by severity (critical first) then rule
+// ID ascending.
+func GenerateCombined(categories []models.DetectorCategory, policies []rules.PolicyFile, stamp Stamp) string {
+	// build category set for O(1) membership check
+	catSet := make(map[models.DetectorCategory]bool, len(categories))
+	for _, c := range categories {
+		catSet[c] = true
+	}
+
+	type sdkSection struct {
+		meta       rules.PolicyMeta
+		tools      []rules.RuleDef
+		agents     []rules.RuleDef
+		subagents  []rules.RuleDef
+		repos      []rules.RuleDef
+		skills     []rules.RuleDef
+	}
+	sections := make(map[models.DetectorCategory]*sdkSection)
+
+	for _, pf := range policies {
+		if !catSet[pf.Policy.Category] {
+			continue
+		}
+		sec := sections[pf.Policy.Category]
+		if sec == nil {
+			sec = &sdkSection{meta: pf.Policy}
+			sections[pf.Policy.Category] = sec
+		}
+		for _, r := range pf.Rules {
+			switch r.Scope {
+			case models.ScopeTool:
+				sec.tools = append(sec.tools, r)
+			case models.ScopeAgent:
+				sec.agents = append(sec.agents, r)
+			case models.ScopeSubagent:
+				sec.subagents = append(sec.subagents, r)
+			case models.ScopeRepo:
+				sec.repos = append(sec.repos, r)
+			case models.ScopeSkill:
+				sec.skills = append(sec.skills, r)
+			}
+		}
+	}
+	for _, sec := range sections {
+		sortRules(sec.tools)
+		sortRules(sec.agents)
+		sortRules(sec.subagents)
+		sortRules(sec.repos)
+		sortRules(sec.skills)
+	}
+
+	// stamp label: human-readable SDK list
+	sdkLabels := make([]string, len(stamp.Categories))
+	for i, c := range stamp.Categories {
+		sdkLabels[i] = string(c)
+	}
+	sdkList := strings.Join(sdkLabels, ", ")
+
+	var b strings.Builder
+
+	// --- Frontmatter ---
+	fmt.Fprintf(&b, "---\n")
+	fmt.Fprintf(&b, "name: trustabl-pre-coding\n")
+	fmt.Fprintf(&b, "description: >-\n  Pre-coding reliability constraints for: %s\n", sdkList)
+	fmt.Fprintf(&b, "allowed-tools: Read\n")
+	fmt.Fprintf(&b, "disable-model-invocation: false\n")
+	fmt.Fprintf(&b, "---\n\n")
+
+	// --- Header ---
+	fmt.Fprintf(&b, "# Trustabl Pre-Coding Reliability Constraints\n\n")
+	fmt.Fprintf(&b, "<!-- generated: %s | rules: %s | schema: %d | sdks: %s -->\n\n",
+		stamp.Date, stamp.RulesSHA, stamp.SchemaVersion, sdkList)
+	fmt.Fprintf(&b, "Before writing any agent code, apply every constraint below. Rules are\n")
+	fmt.Fprintf(&b, "ordered by severity. A violation here will fire the corresponding finding\n")
+	fmt.Fprintf(&b, "in post-build scan — prevent it now.\n\n")
+
+	// --- One section per category, in stamp.Categories order ---
+	for _, cat := range stamp.Categories {
+		sec, ok := sections[cat]
+		if !ok {
+			continue
+		}
+		fmt.Fprintf(&b, "---\n\n")
+		fmt.Fprintf(&b, "## %s\n\n", sec.meta.Name)
+		emitRuleSection(&b, "Tool Rules", sec.tools, models.ScopeTool)
+		emitRuleSection(&b, "Agent Rules", sec.agents, models.ScopeAgent)
+		emitRuleSection(&b, "Subagent Rules", sec.subagents, models.ScopeSubagent)
+		emitRuleSection(&b, "Repo Rules", sec.repos, models.ScopeRepo)
+		emitRuleSection(&b, "Skill Rules", sec.skills, models.ScopeSkill)
+	}
+
+	return b.String()
+}
+
 // sanitizeEmittedText neutralizes literal strings that would trigger skill safety
 // detectors on the generated file. Rule explanations quote the dangerous patterns
 // they guard against; we must emit safe equivalents so the output does not
