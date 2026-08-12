@@ -8,17 +8,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestForgeCommand_RequiresPolicyFlag(t *testing.T) {
+func TestForgeCommand_NoPolicyFlag_NoArgs_OK(t *testing.T) {
+	// --policy is optional; no args and no --policy should be accepted by cobra
+	// (the SDK-detection error is a runtime concern, not a flag-parse error).
 	cmd := newForgeCommand(nil)
-	buf := &bytes.Buffer{}
-	cmd.SetErr(buf)
-	err := cmd.Execute()
-	if err == nil {
-		t.Error("expected error when --policy is missing")
+	if cmd.Args == nil {
+		t.Error("expected Args validator to be set")
 	}
-	// cobra reports "required flag(s) not set" for MarkFlagRequired
-	if !strings.Contains(err.Error(), "policy") && !strings.Contains(buf.String(), "policy") {
-		t.Errorf("error should mention 'policy', got err=%v buf=%s", err, buf.String())
+	// Verify that the --policy flag is NOT marked required.
+	pf := cmd.Flags().Lookup("policy")
+	if pf == nil {
+		t.Fatal("--policy flag not registered")
+	}
+	if pf.Annotations != nil {
+		if _, required := pf.Annotations["cobra_annotation_bash_completion_one_required_flag"]; required {
+			t.Error("--policy should not be a required flag")
+		}
 	}
 }
 
@@ -54,10 +59,37 @@ func TestForgeCommand_Flags(t *testing.T) {
 
 func TestForgeCommand_HelpText(t *testing.T) {
 	cmd := newForgeCommand(nil)
-	if !strings.Contains(cmd.Long, "trustabl scan") {
-		t.Error("help text should mention trustabl scan for contrast")
+	if !strings.Contains(cmd.Long, "SKILL.md") {
+		t.Error("help text should mention SKILL.md")
 	}
-	if !strings.Contains(cmd.Long, "trustabl forge") {
-		t.Error("help text should mention trustabl forge")
+	if !strings.Contains(cmd.Long, "--policy") {
+		t.Error("help text should mention --policy flag")
+	}
+	if !strings.Contains(cmd.Use, "[target]") {
+		t.Errorf("Use should include [target], got: %s", cmd.Use)
+	}
+}
+
+func TestForgeCommand_PolicyFlag_CommaSeparated(t *testing.T) {
+	// Verify cobra can parse comma-separated --policy values without panicking.
+	cmd := newForgeCommand(nil)
+	buf := &bytes.Buffer{}
+	cmd.SetErr(buf)
+	// Providing two known categories — will fail at rules-resolve since no network,
+	// but flag parsing itself must succeed (no unknown-category error).
+	if err := cmd.Flags().Set("policy", "openai_sdk,mcp"); err != nil {
+		t.Fatalf("failed to set --policy flag: %v", err)
+	}
+}
+
+func TestForgeCommand_MaxOnePositionalArg(t *testing.T) {
+	cmd := newForgeCommand(nil)
+	// Two positional args should be rejected.
+	buf := &bytes.Buffer{}
+	cmd.SetErr(buf)
+	cmd.SetOut(buf)
+	err := cmd.Args(cmd, []string{"arg1", "arg2"})
+	if err == nil {
+		t.Error("expected error for two positional args")
 	}
 }

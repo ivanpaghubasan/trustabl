@@ -248,6 +248,132 @@ func TestGenerate_SkillCompliant(t *testing.T) {
 	}
 }
 
+func TestMatchConditionForScope_ToolScope(t *testing.T) {
+	got := matchConditionForScope(models.ScopeTool, rules.MatchExpr{})
+	want := "When defining a tool."
+	if got != want {
+		t.Errorf("matchConditionForScope(tool) = %q, want %q", got, want)
+	}
+}
+
+func TestMatchConditionForScope_AgentScope(t *testing.T) {
+	got := matchConditionForScope(models.ScopeAgent, rules.MatchExpr{})
+	want := "When declaring an agent."
+	if got != want {
+		t.Errorf("matchConditionForScope(agent) = %q, want %q", got, want)
+	}
+}
+
+func TestMatchConditionForScope_RepoScope(t *testing.T) {
+	got := matchConditionForScope(models.ScopeRepo, rules.MatchExpr{})
+	want := "For any repo using this SDK."
+	if got != want {
+		t.Errorf("matchConditionForScope(repo) = %q, want %q", got, want)
+	}
+}
+
+func TestMatchConditionForScope_SubagentScope(t *testing.T) {
+	got := matchConditionForScope(models.ScopeSubagent, rules.MatchExpr{})
+	want := "When declaring a subagent."
+	if got != want {
+		t.Errorf("matchConditionForScope(subagent) = %q, want %q", got, want)
+	}
+}
+
+func TestMatchConditionForScope_SkillScope_DelegatesToExisting(t *testing.T) {
+	boolTrue := true
+	expr := rules.MatchExpr{SkillAllowsUnrestrictedShell: &boolTrue}
+	got := matchConditionForScope(models.ScopeSkill, expr)
+	want := "Every skill — always verify allowed-tools before emitting."
+	if got != want {
+		t.Errorf("matchConditionForScope(skill) = %q, want %q", got, want)
+	}
+}
+
+func TestGenerateCombined_GoldenFile(t *testing.T) {
+	inputDir := filepath.Join("..", "..", "testdata", "forge", "multi_sdk", "input")
+	fsys := os.DirFS(inputDir)
+	policies, err := rules.Load(fsys)
+	if err != nil {
+		t.Fatalf("load fixture rules: %v", err)
+	}
+	if len(policies) == 0 {
+		t.Fatal("no policies loaded from fixture")
+	}
+
+	stamp := Stamp{
+		Date:          "2026-01-01",
+		RulesSHA:      "abc1234",
+		SchemaVersion: 13,
+		Categories:    []models.DetectorCategory{models.CategoryClaudeSDK, models.CategoryOpenAISDK},
+	}
+	got := GenerateCombined(stamp.Categories, policies, stamp)
+
+	goldenPath := filepath.Join("..", "..", "testdata", "forge", "multi_sdk", "expected", "SKILL.md")
+	if *update {
+		if err := os.MkdirAll(filepath.Dir(goldenPath), 0o755); err != nil {
+			t.Fatalf("mkdir golden dir: %v", err)
+		}
+		if err := os.WriteFile(goldenPath, []byte(got), 0o644); err != nil {
+			t.Fatalf("write golden file: %v", err)
+		}
+		t.Logf("updated golden file at %s", goldenPath)
+		return
+	}
+
+	wantBytes, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("golden file not found at %s; run:\n  go test ./internal/forge/... -update", goldenPath)
+	}
+	if got != string(wantBytes) {
+		t.Errorf("GenerateCombined() does not match golden file %s\n\n%s",
+			goldenPath, lineDiff(string(wantBytes), got))
+	}
+}
+
+func TestGenerateCombined_Deterministic(t *testing.T) {
+	inputDir := filepath.Join("..", "..", "testdata", "forge", "multi_sdk", "input")
+	fsys := os.DirFS(inputDir)
+	policies, err := rules.Load(fsys)
+	if err != nil {
+		t.Fatalf("load fixture rules: %v", err)
+	}
+	stamp := Stamp{
+		Date:          "2026-01-01",
+		RulesSHA:      "abc1234",
+		SchemaVersion: 13,
+		Categories:    []models.DetectorCategory{models.CategoryClaudeSDK, models.CategoryOpenAISDK},
+	}
+	a := GenerateCombined(stamp.Categories, policies, stamp)
+	b := GenerateCombined(stamp.Categories, policies, stamp)
+	if a != b {
+		t.Error("GenerateCombined is not deterministic")
+	}
+}
+
+func TestGenerateCombined_UnknownCategorySkipped(t *testing.T) {
+	inputDir := filepath.Join("..", "..", "testdata", "forge", "multi_sdk", "input")
+	fsys := os.DirFS(inputDir)
+	policies, err := rules.Load(fsys)
+	if err != nil {
+		t.Fatalf("load fixture rules: %v", err)
+	}
+	stamp := Stamp{
+		Date:          "2026-01-01",
+		RulesSHA:      "abc1234",
+		SchemaVersion: 13,
+		Categories:    []models.DetectorCategory{models.CategoryMCP}, // not in fixture
+	}
+	got := GenerateCombined(stamp.Categories, policies, stamp)
+	// should produce valid frontmatter + header but no rule sections
+	if !strings.Contains(got, "name: trustabl-pre-coding") {
+		t.Error("expected frontmatter in output")
+	}
+	if strings.Contains(got, "#### [") {
+		t.Error("expected no rule blocks when category has no rules in fixture")
+	}
+}
+
 // lineDiff produces a simple line-oriented diff for test failure messages.
 func lineDiff(want, got string) string {
 	wantLines := strings.Split(want, "\n")
