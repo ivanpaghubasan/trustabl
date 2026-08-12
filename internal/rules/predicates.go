@@ -311,6 +311,30 @@ func bodyTextFromSpan(src []byte, start, end int) string {
 	return strings.Join(lines[start-1:end], "\n")
 }
 
+// PredHasDescriptionText reports whether the tool's description contains any
+// of the listed substrings, case-insensitively. Unlike PredHasBodyText (which
+// matches case-sensitively against the function body), this lowers both sides
+// because placeholder markers in descriptions appear inconsistently cased
+// ("TODO", "todo", "Todo").
+func PredHasDescriptionText(needles []string, t models.ToolDef) bool {
+	description := strings.ToLower(t.Description)
+	for _, n := range needles {
+		if strings.Contains(description, strings.ToLower(n)) {
+			return true
+		}
+	}
+	return false
+}
+
+// ─── int predicates ───────────────────────────────────────────────────────────
+
+// PredDescriptionLengthLt reports whether the tool's trimmed description is
+// shorter than n characters — a stub description too short to give the model
+// a usable selection signal.
+func PredDescriptionLengthLt(t models.ToolDef, n int) bool {
+	return len(strings.TrimSpace(t.Description)) < n
+}
+
 func PredParamNameMatches(expr ParamNameMatchExpr, t models.ToolDef) bool {
 	for _, p := range t.ParamNames {
 		lower := strings.ToLower(p)

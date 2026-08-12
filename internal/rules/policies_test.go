@@ -1953,6 +1953,39 @@ def calc(expr: str) -> int:
 			"  return { content: [{ type: \"text\", text: id }] };\n" +
 			"});\n",
 	},
+
+	// ─── CSDK-017 placeholder tool description ─────────────────────────────
+	{name: "CSDK-017 fires on TODO placeholder description", ruleID: "CSDK-017", kind: models.KindClaudeSDKTool, src: `
+def fetch_data(x: str) -> dict:
+    """TODO: describe this tool."""
+    return {}
+`,
+		toolConfig: nil, wantFires: true},
+	{name: "CSDK-017 silent with a real description", ruleID: "CSDK-017", kind: models.KindClaudeSDKTool, src: `
+def fetch_data(x: str) -> dict:
+    """Fetch the current account balance for the given customer ID."""
+    return {}
+`,
+		toolConfig: nil, wantFires: false},
+
+	// ─── CSDK-018 description too short to guide selection ─────────────────
+	{name: "CSDK-018 fires on a stub description", ruleID: "CSDK-018", kind: models.KindClaudeSDKTool, src: `
+def fetch_data(x: str) -> dict:
+    """Gets data."""
+    return {}
+`,
+		toolConfig: nil, wantFires: true},
+	{name: "CSDK-018 silent with a description over the length threshold", ruleID: "CSDK-018", kind: models.KindClaudeSDKTool, src: `
+def fetch_data(x: str) -> dict:
+    """Fetch the current account balance for the given customer ID."""
+    return {}
+`,
+		toolConfig: nil, wantFires: false},
+	{name: "CSDK-018 silent with no description at all", ruleID: "CSDK-018", kind: models.KindClaudeSDKTool, src: `
+def fetch_data(x: str) -> dict:
+    return {}
+`,
+		toolConfig: nil, wantFires: false},
 }
 
 // policyRepoRuleCases covers repo-scoped rules.
@@ -2370,28 +2403,64 @@ var policySkillRuleCases = []policySkillCase{
 		models.SkillDef{Name: "generic-skill",
 			Location: models.Location{FilePath: ".claude/skills/generic-skill/SKILL.md"}}, models.RepoInventory{}, false},
 
-	{"CSKILL-062 fires when the body contains a TODO marker", "CSKILL-062",
+	{"CSKILL-080 fires when the name claims a crypto operation", "CSKILL-080",
+		models.SkillDef{Name: "encrypt-helper",
+			Location: models.Location{FilePath: ".claude/skills/encrypt-helper/SKILL.md"}}, models.RepoInventory{}, true},
+	{"CSKILL-080 silent when the name and description have no crypto terms", "CSKILL-080",
+		models.SkillDef{Name: "helper", Description: "Summarises the current git diff.",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"}}, models.RepoInventory{}, false},
+
+	{"CSKILL-081 fires when the body names a sensitive data class", "CSKILL-081",
 		models.SkillDef{Name: "helper",
 			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"},
-			Body:     "# Helper\n\nTODO: finish the retry logic."}, models.RepoInventory{}, true},
-	{"CSKILL-062 silent when the body has no placeholder text", "CSKILL-062",
+			Body:     "# Helper\n\nReads the user's password from the config file."}, models.RepoInventory{}, true},
+	{"CSKILL-081 silent when the body and description name no sensitive data", "CSKILL-081",
 		models.SkillDef{Name: "helper",
 			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"},
 			Body:     "# Helper\n\nSummarises the current git diff."}, models.RepoInventory{}, false},
 
-	{"CSKILL-063 fires when the name contains a draft marker", "CSKILL-063",
-		models.SkillDef{Name: "deploy-draft",
-			Location: models.Location{FilePath: ".claude/skills/deploy-draft/SKILL.md"}}, models.RepoInventory{}, true},
-	{"CSKILL-063 silent when the name has no draft/test/wip marker", "CSKILL-063",
-		models.SkillDef{Name: "deploy",
-			Location: models.Location{FilePath: ".claude/skills/deploy/SKILL.md"}}, models.RepoInventory{}, false},
+	{"CSKILL-082 fires when a security-purpose skill grants Bash", "CSKILL-082",
+		models.SkillDef{Name: "security-audit",
+			Location:   models.Location{FilePath: ".claude/skills/security-audit/SKILL.md"},
+			ToolGrants: []models.ToolGrant{{Tool: "Bash", Pattern: "*"}}}, models.RepoInventory{}, true},
+	{"CSKILL-082 silent when a security-purpose skill only reads", "CSKILL-082",
+		models.SkillDef{Name: "security-audit",
+			Location:   models.Location{FilePath: ".claude/skills/security-audit/SKILL.md"},
+			ToolGrants: []models.ToolGrant{{Tool: "Read"}, {Tool: "Grep"}}}, models.RepoInventory{}, false},
 
-	{"CSKILL-064 fires when the description flags internal-only use", "CSKILL-064",
-		models.SkillDef{Name: "helper", Description: "Internal use only — do not distribute outside the team.",
-			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"}}, models.RepoInventory{}, true},
-	{"CSKILL-064 silent when the description has no such marker", "CSKILL-064",
+	{"CSKILL-083 fires when the body has no error-handling language", "CSKILL-083",
+		models.SkillDef{Name: "helper",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"},
+			Body:     "# Helper\n\nSummarises the current git diff."}, models.RepoInventory{}, true},
+	{"CSKILL-083 silent when the body names a failure/retry path", "CSKILL-083",
+		models.SkillDef{Name: "helper",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"},
+			Body:     "# Helper\n\nIf the read fails, retry once before reporting the failure."}, models.RepoInventory{}, false},
+
+	{"CSKILL-084 fires when the body uses broad-access phrasing", "CSKILL-084",
+		models.SkillDef{Name: "helper",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"},
+			Body:     "# Helper\n\nExports all data from the database for review."}, models.RepoInventory{}, true},
+	{"CSKILL-084 silent when the body scopes its data access", "CSKILL-084",
+		models.SkillDef{Name: "helper",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"},
+			Body:     "# Helper\n\nSummarises the current git diff."}, models.RepoInventory{}, false},
+
+	{"CSKILL-085 fires when the description states no purpose", "CSKILL-085",
 		models.SkillDef{Name: "helper", Description: "Summarises the current git diff.",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"}}, models.RepoInventory{}, true},
+	{"CSKILL-085 silent when the description states a purpose", "CSKILL-085",
+		models.SkillDef{Name: "helper", Description: "Summarises the current git diff, used for reviewing changes before merge.",
 			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"}}, models.RepoInventory{}, false},
+
+	{"CSKILL-086 fires when the body implies data retention or logging", "CSKILL-086",
+		models.SkillDef{Name: "helper",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"},
+			Body:     "# Helper\n\nStores the diff summary in a local cache for reuse."}, models.RepoInventory{}, true},
+	{"CSKILL-086 silent when the body implies no persistence", "CSKILL-086",
+		models.SkillDef{Name: "helper",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"},
+			Body:     "# Helper\n\nSummarises the current git diff."}, models.RepoInventory{}, false},
 }
 
 // policyAgentRuleCases covers agent-scoped rules.
