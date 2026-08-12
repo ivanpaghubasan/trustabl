@@ -203,6 +203,28 @@ rules:
 #       Reserve new uses for a known constant that has no structural
 #       signature.
 #
+#   has_description_text: [substring, substring, ...]
+#       The tool's description (docstring for Python, the explicit
+#       description argument for TypeScript) contains any listed substring.
+#       Matching is CASE-INSENSITIVE (unlike has_body_text above) — placeholder
+#       markers show up as "TODO", "todo", "Todo" interchangeably, and lowering
+#       both sides avoids authoring a rule per casing. Reads ToolDef.Description,
+#       not the function body — use has_body_text for body content.
+#       Intended use: catch placeholder descriptions (todo, tbd, fixme,
+#       placeholder, "no description") that pass has_docstring but give the
+#       model no real selection signal.
+#
+#
+# ━━━ INT PREDICATES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+#   description_length_lt: N
+#       Fires when the tool's description, trimmed of leading/trailing
+#       whitespace, is shorter than N characters. Pair with
+#       `has_docstring: true` (via `all:`) so this doesn't double-report
+#       against a rule that already flags a missing description — an empty
+#       description is length 0, which is also < N, but that case belongs to
+#       has_docstring, not this predicate.
+#
 #
 # ━━━ NESTED STRUCT PREDICATES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #
