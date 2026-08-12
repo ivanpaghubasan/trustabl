@@ -2258,6 +2258,13 @@ var policySubagentRuleCases = []policySubagentCase{
 	{"CSDK-111 silent on read-only tool set", "CSDK-111",
 		models.SubagentDef{Name: "reader", Location: models.Location{FilePath: ".claude/agents/reader2.md"},
 			Tools: []string{"Read", "Grep", "Glob"}}, models.RepoInventory{}, false},
+
+	{"CSDK-112 fires when subagent grants WebSearch", "CSDK-112",
+		models.SubagentDef{Name: "researcher", Location: models.Location{FilePath: ".claude/agents/researcher.md"},
+			Tools: []string{"Read", "WebSearch"}}, models.RepoInventory{}, true},
+	{"CSDK-112 silent without WebSearch", "CSDK-112",
+		models.SubagentDef{Name: "reader3", Location: models.Location{FilePath: ".claude/agents/reader3.md"},
+			Tools: []string{"Read", "Grep", "Glob"}}, models.RepoInventory{}, false},
 }
 
 // policySkillRuleCases covers skill-scoped rules (CSKILL-*).
@@ -2491,6 +2498,21 @@ var policyAgentRuleCases = []policyAgentCase{
 			}},
 		models.RepoInventory{}, false},
 
+	{"CREW-109 fires when agent wires FileWriterTool", "CREW-109",
+		models.AgentDef{
+			SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython,
+			HostedToolRefs: []models.HostedToolRef{
+				{Class: "FileWriterTool", Resolved: &models.HostedToolDef{Class: "FileWriterTool"}},
+			}},
+		models.RepoInventory{}, true},
+	{"CREW-109 silent when agent only wires FileReadTool", "CREW-109",
+		models.AgentDef{
+			SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython,
+			HostedToolRefs: []models.HostedToolRef{
+				{Class: "FileReadTool", Resolved: &models.HostedToolDef{Class: "FileReadTool"}},
+			}},
+		models.RepoInventory{}, false},
+
 	{"CREW-107 fires when agent wires ScrapeWebsiteTool", "CREW-107",
 		models.AgentDef{
 			SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython,
@@ -2544,10 +2566,12 @@ var policyAgentRuleCases = []policyAgentCase{
 			}}},
 		models.RepoInventory{}, false},
 
-	// AG2-004: GroupChatManager / GroupChat with no max_round.
-	{"AG2-004 fires when GroupChatManager has no max_round", "AG2-004",
+	// AG2-004: GroupChat with no max_round. The match now anchors on
+	// agent_class: [GroupChat] (the only constructor that accepts max_round),
+	// so a GroupChatManager wrapping a bounded GroupChat does not fire.
+	{"AG2-004 fires when GroupChat has no max_round", "AG2-004",
 		models.AgentDef{
-			SDK: models.SDKAutoGen, Class: "GroupChatManager", Language: models.LanguagePython,
+			SDK: models.SDKAutoGen, Class: "GroupChat", Language: models.LanguagePython,
 			Kwargs: &models.KwargTree{Children: map[string]*models.KwargTree{}}},
 		models.RepoInventory{}, true},
 	{"AG2-004 silent when max_round is set", "AG2-004",
@@ -3782,6 +3806,19 @@ var policyAgentRuleCases = []policyAgentCase{
 		parseTSVercelAgentInline("import { generateText } from \"ai\";\n" +
 			"import { anthropic } from \"@ai-sdk/anthropic\";\n" +
 			"const r = await generateText({ model: anthropic(\"claude-sonnet-4\"), toolChoice: \"auto\", tools: { bash: anthropic.tools.bash_20250124() } });\n"),
+		models.RepoInventory{},
+		false},
+
+	{"VAI-009 fires when agent wires a provider web-search tool", "VAI-009",
+		parseTSVercelAgentInline("import { generateText } from \"ai\";\n" +
+			"import { anthropic } from \"@ai-sdk/anthropic\";\n" +
+			"const r = await generateText({ model: anthropic(\"claude-sonnet-4\"), tools: { search: anthropic.tools.webSearch_20250305() } });\n"),
+		models.RepoInventory{},
+		true},
+	{"VAI-009 silent without a web-retrieval provider tool", "VAI-009",
+		parseTSVercelAgentInline("import { generateText } from \"ai\";\n" +
+			"import { openai } from \"@ai-sdk/openai\";\n" +
+			"const r = await generateText({ model: openai(\"gpt-5\"), tools: { weather: weatherTool } });\n"),
 		models.RepoInventory{},
 		false},
 }
