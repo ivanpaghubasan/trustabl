@@ -2101,6 +2101,52 @@ var policyRepoRuleCases = []policyRepoCase{
 		},
 		false},
 
+	// ─── CSDK-204 session max_turns missing (repo-scoped) ────────────────────
+	{"CSDK-204 fires when the only ClaudeAgentOptions sets no max_turns", "CSDK-204",
+		models.RepoProfile{},
+		models.RepoInventory{
+			SDKsDetected:       []models.SDK{models.SDKClaudeAgentSDK},
+			ClaudeAgentOptions: []models.ClaudeAgentOptionsDef{{}},
+		},
+		true},
+	{"CSDK-204 silent when max_turns is set", "CSDK-204",
+		models.RepoProfile{},
+		models.RepoInventory{
+			SDKsDetected:       []models.SDK{models.SDKClaudeAgentSDK},
+			ClaudeAgentOptions: []models.ClaudeAgentOptionsDef{optionsWithMaxTurns("10")},
+		},
+		false},
+	// One of several constructions sets max_turns: that's enough to silence
+	// the rule for the whole repo — this is an absence check across all
+	// constructions, not a per-call match.
+	{"CSDK-204 silent when at least one of several sets max_turns", "CSDK-204",
+		models.RepoProfile{},
+		models.RepoInventory{
+			SDKsDetected: []models.SDK{models.SDKClaudeAgentSDK},
+			ClaudeAgentOptions: []models.ClaudeAgentOptionsDef{
+				{}, optionsWithMaxTurns("10"),
+			},
+		},
+		false},
+	// No ClaudeAgentOptions construction anywhere: nothing to flag.
+	{"CSDK-204 silent when repo has no ClaudeAgentOptions", "CSDK-204",
+		models.RepoProfile{},
+		models.RepoInventory{
+			SDKsDetected:       []models.SDK{models.SDKClaudeAgentSDK},
+			ClaudeAgentOptions: nil,
+		},
+		false},
+	// The only construction is Opaque (built via ** unpacking): its kwarg set
+	// is untrustworthy, so its silence on max_turns isn't evidence of a
+	// missing cap.
+	{"CSDK-204 silent when the only ClaudeAgentOptions is opaque", "CSDK-204",
+		models.RepoProfile{},
+		models.RepoInventory{
+			SDKsDetected:       []models.SDK{models.SDKClaudeAgentSDK},
+			ClaudeAgentOptions: []models.ClaudeAgentOptionsDef{{Opaque: true}},
+		},
+		false},
+
 	// ─── CSDK-203 / ADK-201 / OAI-202 (team rules): SDK code but no agent doc ─
 	// repo_has_sdk_in_code reads inv.SDKsDetected; repo_component_present reads
 	// profile.Manifest.Components. Fire = SDK present AND neither an agents_md
@@ -2184,6 +2230,16 @@ func optionsWithPermissionMode(mode string) models.ClaudeAgentOptionsDef {
 	}
 }
 
+func optionsWithMaxTurns(v string) models.ClaudeAgentOptionsDef {
+	return models.ClaudeAgentOptionsDef{
+		Kwargs: &models.KwargTree{
+			Children: map[string]*models.KwargTree{
+				"max_turns": {Value: &models.Expr{Kind: models.ExprLiteralInt, Text: v}},
+			},
+		},
+	}
+}
+
 // policySubagentRuleCases covers subagent-scoped rules.
 var policySubagentRuleCases = []policySubagentCase{
 	{"CSDK-110 fires when subagent grants Bash", "CSDK-110",
@@ -2201,6 +2257,13 @@ var policySubagentRuleCases = []policySubagentCase{
 			Tools: []string{"Read", "WebFetch"}}, models.RepoInventory{}, true},
 	{"CSDK-111 silent on read-only tool set", "CSDK-111",
 		models.SubagentDef{Name: "reader", Location: models.Location{FilePath: ".claude/agents/reader2.md"},
+			Tools: []string{"Read", "Grep", "Glob"}}, models.RepoInventory{}, false},
+
+	{"CSDK-112 fires when subagent grants WebSearch", "CSDK-112",
+		models.SubagentDef{Name: "researcher", Location: models.Location{FilePath: ".claude/agents/researcher.md"},
+			Tools: []string{"Read", "WebSearch"}}, models.RepoInventory{}, true},
+	{"CSDK-112 silent without WebSearch", "CSDK-112",
+		models.SubagentDef{Name: "reader3", Location: models.Location{FilePath: ".claude/agents/reader3.md"},
 			Tools: []string{"Read", "Grep", "Glob"}}, models.RepoInventory{}, false},
 }
 
@@ -2306,6 +2369,29 @@ var policySkillRuleCases = []policySkillCase{
 	{"CSKILL-071 silent when skill is agent-agnostic", "CSKILL-071",
 		models.SkillDef{Name: "generic-skill",
 			Location: models.Location{FilePath: ".claude/skills/generic-skill/SKILL.md"}}, models.RepoInventory{}, false},
+
+	{"CSKILL-062 fires when the body contains a TODO marker", "CSKILL-062",
+		models.SkillDef{Name: "helper",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"},
+			Body:     "# Helper\n\nTODO: finish the retry logic."}, models.RepoInventory{}, true},
+	{"CSKILL-062 silent when the body has no placeholder text", "CSKILL-062",
+		models.SkillDef{Name: "helper",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"},
+			Body:     "# Helper\n\nSummarises the current git diff."}, models.RepoInventory{}, false},
+
+	{"CSKILL-063 fires when the name contains a draft marker", "CSKILL-063",
+		models.SkillDef{Name: "deploy-draft",
+			Location: models.Location{FilePath: ".claude/skills/deploy-draft/SKILL.md"}}, models.RepoInventory{}, true},
+	{"CSKILL-063 silent when the name has no draft/test/wip marker", "CSKILL-063",
+		models.SkillDef{Name: "deploy",
+			Location: models.Location{FilePath: ".claude/skills/deploy/SKILL.md"}}, models.RepoInventory{}, false},
+
+	{"CSKILL-064 fires when the description flags internal-only use", "CSKILL-064",
+		models.SkillDef{Name: "helper", Description: "Internal use only — do not distribute outside the team.",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"}}, models.RepoInventory{}, true},
+	{"CSKILL-064 silent when the description has no such marker", "CSKILL-064",
+		models.SkillDef{Name: "helper", Description: "Summarises the current git diff.",
+			Location: models.Location{FilePath: ".claude/skills/helper/SKILL.md"}}, models.RepoInventory{}, false},
 }
 
 // policyAgentRuleCases covers agent-scoped rules.
@@ -2406,6 +2492,17 @@ var policyAgentRuleCases = []policyAgentCase{
 			}}},
 		models.RepoInventory{}, false},
 
+	{"CREW-110 fires when Agent has no max_iter", "CREW-110",
+		models.AgentDef{SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython},
+		models.RepoInventory{}, true},
+	{"CREW-110 silent when max_iter set", "CREW-110",
+		models.AgentDef{
+			SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython,
+			Kwargs: &models.KwargTree{Children: map[string]*models.KwargTree{
+				"max_iter": {Value: &models.Expr{Kind: models.ExprLiteralInt, Text: "5"}},
+			}}},
+		models.RepoInventory{}, false},
+
 	{"CREW-106 fires when FileReadTool has no file_path", "CREW-106",
 		models.AgentDef{
 			SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython,
@@ -2421,6 +2518,21 @@ var policyAgentRuleCases = []policyAgentCase{
 					Kwargs: &models.KwargTree{Children: map[string]*models.KwargTree{
 						"file_path": {Value: &models.Expr{Kind: models.ExprLiteralString, Text: `"data.txt"`}},
 					}}}},
+			}},
+		models.RepoInventory{}, false},
+
+	{"CREW-109 fires when agent wires FileWriterTool", "CREW-109",
+		models.AgentDef{
+			SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython,
+			HostedToolRefs: []models.HostedToolRef{
+				{Class: "FileWriterTool", Resolved: &models.HostedToolDef{Class: "FileWriterTool"}},
+			}},
+		models.RepoInventory{}, true},
+	{"CREW-109 silent when agent only wires FileReadTool", "CREW-109",
+		models.AgentDef{
+			SDK: models.SDKCrewAI, Class: "Agent", Language: models.LanguagePython,
+			HostedToolRefs: []models.HostedToolRef{
+				{Class: "FileReadTool", Resolved: &models.HostedToolDef{Class: "FileReadTool"}},
 			}},
 		models.RepoInventory{}, false},
 
@@ -2477,10 +2589,12 @@ var policyAgentRuleCases = []policyAgentCase{
 			}}},
 		models.RepoInventory{}, false},
 
-	// AG2-004: GroupChatManager / GroupChat with no max_round.
-	{"AG2-004 fires when GroupChatManager has no max_round", "AG2-004",
+	// AG2-004: GroupChat with no max_round. The match now anchors on
+	// agent_class: [GroupChat] (the only constructor that accepts max_round),
+	// so a GroupChatManager wrapping a bounded GroupChat does not fire.
+	{"AG2-004 fires when GroupChat has no max_round", "AG2-004",
 		models.AgentDef{
-			SDK: models.SDKAutoGen, Class: "GroupChatManager", Language: models.LanguagePython,
+			SDK: models.SDKAutoGen, Class: "GroupChat", Language: models.LanguagePython,
 			Kwargs: &models.KwargTree{Children: map[string]*models.KwargTree{}}},
 		models.RepoInventory{}, true},
 	{"AG2-004 silent when max_round is set", "AG2-004",
@@ -3715,6 +3829,19 @@ var policyAgentRuleCases = []policyAgentCase{
 		parseTSVercelAgentInline("import { generateText } from \"ai\";\n" +
 			"import { anthropic } from \"@ai-sdk/anthropic\";\n" +
 			"const r = await generateText({ model: anthropic(\"claude-sonnet-4\"), toolChoice: \"auto\", tools: { bash: anthropic.tools.bash_20250124() } });\n"),
+		models.RepoInventory{},
+		false},
+
+	{"VAI-009 fires when agent wires a provider web-search tool", "VAI-009",
+		parseTSVercelAgentInline("import { generateText } from \"ai\";\n" +
+			"import { anthropic } from \"@ai-sdk/anthropic\";\n" +
+			"const r = await generateText({ model: anthropic(\"claude-sonnet-4\"), tools: { search: anthropic.tools.webSearch_20250305() } });\n"),
+		models.RepoInventory{},
+		true},
+	{"VAI-009 silent without a web-retrieval provider tool", "VAI-009",
+		parseTSVercelAgentInline("import { generateText } from \"ai\";\n" +
+			"import { openai } from \"@ai-sdk/openai\";\n" +
+			"const r = await generateText({ model: openai(\"gpt-5\"), tools: { weather: weatherTool } });\n"),
 		models.RepoInventory{},
 		false},
 }
